@@ -1,70 +1,64 @@
-from fastapi import FastAPI, Path
-from typing import Optional
-from pydantic import BaseModel
+from typing import List
+from uuid import uuid4, UUID
+from fastapi import FastAPI, HTTPException
+from models import User,Gender, Roles, UserUpdateRequest
 
-# uvicorn myapi:app --reload
+# uvicorn main:app --reload
 app = FastAPI()
 
-students = {
-    1: {
-        "name" : "John",
-        "age" : 17,
-        "year" : "Year 12"
-    }
-}
-
-class Student(BaseModel):
-    name: str
-    age: int
-    year: str
-
-class UpdateStudent(BaseModel):
-    name: Optional[str] = None
-    age: Optional[int] = None
-    year: Optional[str] = None
-
+db: List[User] = [
+    User(id=uuid4(),
+         first_name="Jamila",
+         last_name="Ahmed",
+         gender=Gender.female,
+         roles=[Roles.student]
+         ),
+    User(id=uuid4(),
+         first_name="Alex",
+         last_name="Jones",
+         gender=Gender.male,
+         roles=[Roles.admin, Roles.user]
+         )
+]
 
 @app.get("/")
-def index():
-    return{"name": "First Data"}
+async def root():
+    return {"Hello": "Mundo"}
 
-@app.get("/get-student/{student_id}")
-def get_student(student_id: int = Path(None, description="The ID of the student you want to view", gt=0, lt=3)):
-    return students[student_id]
+@app.get("/api/v1/users")
+async def fetch_users():
+    return db
 
-@app.get("/get-by-name")
-def get_student(*, student_id : int, name : Optional[str] = None):
-    for student_id in students:
-        if students[student_id]["name"] == name:
-            return students[student_id]
-    return {"Data" : "Not found"}
+@app.post("/api/v1/users")
+async def register_user(user: User):
+    db.append(user)
+    return {"id": user.id}
 
-@app.post("/create-student/{student_id}")
-def create_student(student_id : int, student : Student):
-    if student_id in students:
-        return {"Error":"Student Exists"}
+@app.delete("/api/v1/users/{user_id}")
+async def delete_user(user_id: UUID):
+    for user in db:
+        if user.id == user_id:
+            db.remove(user)
+            return
+    raise HTTPException(
+        status_code=404,
+        detail=f"user with id: {user_id} does not exist"
+    )
 
-    students[student_id] = student
-    return students[student_id]
-
-@app.put("/update-student/{student_id}")
-def update_student(student_id:int, student: UpdateStudent):
-    if student_id not in students:
-        return {"Error" : "Student doesn't exist"}
-
-    if student.name != None:
-        students[student_id].name = student.name
-    if student.age != None:
-        students[student_id].age = student.age
-    if student.year != None:
-        students[student_id].year = student.year
-
-    return students[student_id]
-
-@app.delete("/delete-student/{student_id}")
-def delete_student(student_id : int):
-    if student_id not in students:
-        return {"Error" : "Student doesn't exist"}
-
-    del students[student_id]
-    return {"Message" : f"Student {student_id} has been deleted"}
+@app.put("/api/v1/users/{user_id}")
+async def update_user(user_update: UserUpdateRequest, user_id: UUID):
+    for user in db:
+        if user.id == user_id:
+            if user_update.first_name is not None:
+                user.first_name = user_update.first_name
+            if user_update.last_name is not None:
+                user.last_name = user_update.last_name
+            if user_update.middle_name is not None:
+                user.middle_name = user_update.middle_name
+            if user_update.roles is not None:
+                user.roles = user_update.roles
+            return
+    raise HTTPException(
+        status_code=404,
+        detail= f"user with id: {user_id} does not exist"
+    )
